@@ -4,7 +4,7 @@
 #include "Gameplay/StickCollection/Stick.h"
 #include "Gameplay/GameplayService.h"
 #include "Global/ServiceLocator.h"
-#include <iostream>
+#include "Sound/SoundService.h"
 #include <random>
 
 namespace Gameplay {
@@ -49,6 +49,17 @@ namespace Gameplay {
 			return rectangle_width;
 		}
 
+		void Gameplay::Collection::StickCollectionContoller::updateSticksPosition()
+		{
+			for (int i = 0; i < sticks.size(); i++)
+			{
+				float x_position = (i * sticks[i]->stick_view->getSize().x) + ((i + 1) * collection_model->elements_spacing);
+				float y_position = collection_model->element_y_position - sticks[i]->stick_view->getSize().y;
+
+				sticks[i]->stick_view->setPosition(sf::Vector2f(x_position, y_position));
+			}
+		}
+
 		void Gameplay::Collection::StickCollectionContoller::shuffleSticks()
 		{
 			std::random_device device;
@@ -56,6 +67,7 @@ namespace Gameplay {
 
 			std::shuffle(sticks.begin(), sticks.end(), random_engine);
 		}
+
 
 		void Gameplay::Collection::StickCollectionContoller::resetSticksColor()
 		{
@@ -75,16 +87,29 @@ namespace Gameplay {
 			stick_to_search->stick_view->setFillColor(collection_model->search_element_color);
 		}
 
+		void Gameplay::Collection::StickCollectionContoller::processSearchThreadState()
+		{
+			if (search_thread.joinable() && stick_to_search == nullptr)
+			{
+				joinThreads();
+			}
+		}
+
+		void Gameplay::Collection::StickCollectionContoller::joinThreads()
+		{
+			search_thread.join();
+		}
+
 		void Gameplay::Collection::StickCollectionContoller::processLinearSearch()
 		{
-
+			Sound::SoundService* sound_service = Global::ServiceLocator::getInstance()->getSoundService();
 			for (int i = 0; i < sticks.size(); i++)
 			{
 
 				number_of_array_access += 1;
 				number_of_comparisons++;
 
-				Global::ServiceLocator::getInstance()->getSoundService()->playSound(Sound::SoundType::COMPARE_SFX);
+				sound_service->playSound(Sound::SoundType::COMPARE_SFX);
 
 				if (sticks[i] == stick_to_search)
 				{
@@ -95,16 +120,82 @@ namespace Gameplay {
 				else
 				{
 					sticks[i]->stick_view->setFillColor(collection_model->processing_element_color);
+					std::this_thread::sleep_for(std::chrono::milliseconds(current_operation_delay));
 					sticks[i]->stick_view->setFillColor(collection_model->element_color);
 				}
 
 			}
 		}
 
-		//Some Code
+
+
+		void Gameplay::Collection::StickCollectionContoller::initializeSticksArray()
+		{
+			for (int i = 0; i < collection_model->number_of_elements; i++)
+				sticks.push_back(new Stick(i));
+		}
+
+		float Gameplay::Collection::StickCollectionContoller::calculateStickHeight(int array_pos)
+		{
+			return (static_cast<float>(array_pos + 1) / collection_model->number_of_elements) * collection_model->max_element_height;
+		}
+
+		void Gameplay::Collection::StickCollectionContoller::destroy()
+		{
+			if (search_thread.joinable()) search_thread.join();
+
+			for (int i = 0; i < sticks.size(); i++) delete(sticks[i]);
+			sticks.clear();
+
+			delete (collection_view);
+			delete (collection_model);
+		}
+
+		Gameplay::Collection::StickCollectionContoller::StickCollectionContoller()
+		{
+			collection_view = new StickCollectionView();
+			collection_model = new StickCollectionModel();
+			initializeSticksArray();
+		}
+
+		Gameplay::Collection::StickCollectionContoller::~StickCollectionContoller()
+		{
+			destroy();
+		}
+
+		void Gameplay::Collection::StickCollectionContoller::initialize()
+		{
+
+			collection_model->initialize();
+			initializeSticks();
+
+			reset();
+
+			time_complexity = "XYZ";
+		}
+
+		void Gameplay::Collection::StickCollectionContoller::update()
+		{
+			processSearchThreadState();
+
+			collection_view->update();
+
+			for (int i = 0; i < sticks.size(); i++)
+				sticks[i]->stick_view->update();
+		}
+
+		void Gameplay::Collection::StickCollectionContoller::render()
+		{
+			collection_view->render();
+			for (int i = 0; i < sticks.size(); i++)
+				sticks[i]->stick_view->render();
+		}
 
 		void Gameplay::Collection::StickCollectionContoller::reset()
 		{
+			current_operation_delay = 0;
+
+			if (search_thread.joinable()) search_thread.join();
 
 			shuffleSticks();
 			updateSticksPosition();
@@ -120,7 +211,9 @@ namespace Gameplay {
 			switch (search_type)
 			{
 			case Gameplay::Collection::SearchType::LINEAR_SEARCH:
-				processLinearSearch();
+				time_complexity = "O(n)";
+				current_operation_delay = collection_model->linear_search_delay;
+				search_thread = std::thread(&StickCollectionContoller::processLinearSearch, this);
 				break;
 			}
 		}
@@ -145,94 +238,9 @@ namespace Gameplay {
 			return collection_model->number_of_elements;
 		}
 
-		void Gameplay::Collection::StickCollectionContoller::updateSticksPosition()
+		int Gameplay::Collection::StickCollectionContoller::getDelayMilliseconds()
 		{
-			for (int i = 0; i < sticks.size(); i++)
-			{
-				float x_position = (i * sticks[i]->stick_view->getSize().x) + ((i + 1) * collection_model->elements_spacing);
-				float y_position = collection_model->element_y_position - sticks[i]->stick_view->getSize().y;
-
-				sticks[i]->stick_view->setPosition(sf::Vector2f(x_position, y_position));
-			}
-		}
-
-		void Gameplay::Collection::StickCollectionContoller::resetSticksColor()
-		{
-			for (int i = 0; i < sticks.size(); i++)
-				sticks[i]->stick_view->setFillColor(collection_model->element_color);
-		}
-
-		void Gameplay::Collection::StickCollectionContoller::initializeSticksArray()
-		{
-			for (int i = 0; i < collection_model->number_of_elements; i++)
-				sticks.push_back(new Stick(i));
-		}
-
-		float Gameplay::Collection::StickCollectionContoller::calculateStickHeight(int array_pos)
-		{
-			return (static_cast<float>(array_pos + 1) / collection_model->number_of_elements) * collection_model->max_element_height;
-		}
-
-		void Gameplay::Collection::StickCollectionContoller::destroy()
-		{
-
-			for (int i = 0; i < sticks.size(); i++) delete(sticks[i]);
-			sticks.clear();
-
-			delete (collection_view);
-			delete (collection_model);
-		}
-
-		Gameplay::Collection::StickCollectionContoller::StickCollectionContoller()
-		{
-			collection_view = new StickCollectionView();
-			collection_model = new StickCollectionModel();
-			initializeSticksArray();
-		}
-
-		Gameplay::Collection::StickCollectionContoller::~StickCollectionContoller()
-		{
-			destroy();
-		}
-
-		void Gameplay::Collection::StickCollectionContoller::initialize()
-		{
-
-			initializeSticks();
-			reset();
-		}
-
-		void Gameplay::Collection::StickCollectionContoller::update()
-		{
-
-			for (int i = 0; i < sticks.size(); i++)
-				sticks[i]->stick_view->update();
-		}
-
-		void Gameplay::Collection::StickCollectionContoller::render()
-		{
-			for (int i = 0; i < sticks.size(); i++)
-				sticks[i]->stick_view->render();
-		}
-
-		void Gameplay::Collection::StickCollectionContoller::reset()
-		{
-			updateSticksPosition();
-			resetSticksColor();
-		}
-
-		void Gameplay::Collection::StickCollectionContoller::searchElement(SearchType search_type)
-		{
-		}
-
-		SearchType Gameplay::Collection::StickCollectionContoller::getSearchType()
-		{
-			return search_type;
-		}
-
-		int Gameplay::Collection::StickCollectionContoller::getNumberOfSticks()
-		{
-			return collection_model->number_of_elements;
+			return current_operation_delay;
 		}
 	}
 }
