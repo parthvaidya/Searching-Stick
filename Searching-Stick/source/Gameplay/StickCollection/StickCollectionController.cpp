@@ -106,6 +106,7 @@ namespace Gameplay {
 			for (int i = 0; i < sticks.size(); i++)
 			{
 
+
 				number_of_array_access += 1;
 				number_of_comparisons++;
 
@@ -126,7 +127,6 @@ namespace Gameplay {
 
 			}
 		}
-
 
 
 		void Gameplay::Collection::StickCollectionContoller::initializeSticksArray()
@@ -242,5 +242,11 @@ namespace Gameplay {
 		{
 			return current_operation_delay;
 		}
+
+		sf::String Gameplay::Collection::StickCollectionContoller::getTimeComplexity()
+		{
+			return time_complexity;
+		}
+
 	}
 }
